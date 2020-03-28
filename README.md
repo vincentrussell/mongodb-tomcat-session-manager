@@ -19,7 +19,7 @@ This is an Apache Tomcat Persistent Session Manager implementation backed by Mon
 
 ```xml
 
-<Manager className="com.github.vincentrussell.tomcat.session.MongoSessionManager" debug="0" saveOnRestart="true" maxActiveSessions="-1" minIdleSwap="-1" maxIdleSwap="-1" maxIdleBackup="-1">
+<Manager className="com.github.vincentrussell.tomcat.session.MongoSessionManager" saveOnRestart="true" maxActiveSessions="-1" minIdleSwap="-1" maxIdleSwap="0" maxIdleBackup="5" processExpiresFrequency="6">
 <Store className="com.github.vincentrussell.tomcat.session.MongoSessionStore"
 databaseName="local"
 adminDatabase="admin"
@@ -31,6 +31,8 @@ hosts="mongo1:27017,mongo2:27018"
 <Manager>
 
 ```
+
+* the following java code sets up the mongo session manager.  Could be used via a spring boot app.
 
 ```java
    MongoSessionManager mongoSessionManager = new MongoSessionManager.Builder()
@@ -46,7 +48,8 @@ hosts="mongo1:27017,mongo2:27018"
 
  Attribute | Description |
  --------- | ----------- |
-saveOnRestart | Whether to save and reload sessions when the Manager **unload** and **load** methods are called.  Defaults to **true**.
+ context | The tomcat context.
+ saveOnRestart | Whether to save and reload sessions when the Manager **unload** and **load** methods are called.  Defaults to **true**.
  maxIdleBackup | How long a session must be idle before it should be backed up. **-1** means sessions won't be backed up.  Defaults to **5**. 
  minIdleSwap | The minimum time in seconds a session must be idle before it is eligible to be swapped to disk to keep the active session count below maxActiveSessions. Setting to **-1** means sessions will not be swapped out to keep the active session count down.  Defaults to **-1** 
  maxIdleSwap | The maximum time in seconds a session may be idle before it is eligible to be swapped to disk due to inactivity. Setting this to **-1** means sessions should not be swapped out just because of inactivity.  Defaults to **0**. 
