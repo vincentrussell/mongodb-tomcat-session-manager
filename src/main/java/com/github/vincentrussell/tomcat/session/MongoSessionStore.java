@@ -10,6 +10,7 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.UpdateOptions;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.Session;
+import org.apache.catalina.Store;
 import org.apache.catalina.session.StandardSession;
 import org.apache.catalina.session.StoreBase;
 import org.bson.Document;
@@ -22,6 +23,11 @@ import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Mongo implemenation of {@link Store}
+ *
+ * @author Vincent Russell
+ */
 public class MongoSessionStore extends StoreBase {
 
     public static final String DEFAULT_ADMIN_DATABASE = "admin";
@@ -94,50 +100,50 @@ public class MongoSessionStore extends StoreBase {
     }
 
 
-    public String getDatabaseName() {
-        return databaseName;
-    }
-
+    /**
+     * the mongo database to use
+     * @param databaseName
+     */
     public void setDatabaseName(String databaseName) {
         this.databaseName = databaseName;
     }
 
-    public String getAdminDatabase() {
-        return adminDatabase;
-    }
-
+    /**
+     * the mongo admin database to use for login
+     * @param adminDatabase
+     */
     public void setAdminDatabase(String adminDatabase) {
         this.adminDatabase = adminDatabase;
     }
 
-    public String getCollectionName() {
-        return collectionName;
-    }
-
+    /**
+     * the collection to store the session data in
+     * @param collectionName
+     */
     public void setCollectionName(String collectionName) {
         this.collectionName = collectionName;
     }
 
-    public String getUsername() {
-        return username;
-    }
-
+    /**
+     * the login username
+     * @param username
+     */
     public void setUsername(String username) {
         this.username = username;
     }
 
-    public String getPassword() {
-        return password;
-    }
-
+    /**
+     * the login password
+     * @param password
+     */
     public void setPassword(String password) {
         this.password = password;
     }
 
-    public String getHosts() {
-        return hosts;
-    }
-
+    /**
+     * the mongo hosts to login to.  Can use commas to set multiple hosts
+     * @param hosts
+     */
     public void setHosts(String hosts) {
         this.hosts = hosts;
     }
