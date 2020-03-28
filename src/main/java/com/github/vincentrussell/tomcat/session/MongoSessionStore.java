@@ -1,13 +1,14 @@
 package com.github.vincentrussell.tomcat.session;
 
 import com.google.common.base.Function;
+import com.google.common.base.Splitter;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.mongodb.*;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.UpdateOptions;
-import org.apache.catalina.Manager;
+import org.apache.catalina.LifecycleException;
 import org.apache.catalina.Session;
 import org.apache.catalina.session.StandardSession;
 import org.apache.catalina.session.StoreBase;
@@ -21,25 +22,38 @@ import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
-public class MongoDbSessionStore extends StoreBase {
+public class MongoSessionStore extends StoreBase {
 
+    public static final String DEFAULT_ADMIN_DATABASE = "admin";
+    private static final int DEFAULT_MONGO_PORT = 27017;
+    public static final String USER_SESSIONS = "tomcat_user_sessions";
     public static final String ID_FIELD = "_id";
     public static final String PRINCIPAL_NAME_FIELD = "principalName";
     public static final String CREATION_TIME_FIELD = "creationTime";
     public static final String EXPIRATION_TIME = "expirationTime";
     public static final String DATA_FIELD = "data";
     public static final String LAST_MODIFIED_FIELD = "lastModified";
-    private final MongoClient mongoClient;
-    private final MongoDatabase mongoDatabase;
-    private final MongoCollection<Document> mongoCollection;
 
-    protected MongoDbSessionStore(final Manager manager, final MongoClient mongoClient,
-                        final String databaseName, final String collectionName) {
-        setManager(manager);
-        this.mongoClient = mongoClient;
+    private MongoDatabase mongoDatabase;
+    private MongoCollection<Document> mongoCollection;
+
+    private MongoClient mongoClient;
+    private String databaseName;
+    private String adminDatabase = "admin";
+    private String collectionName = USER_SESSIONS;
+    private String username;
+    private String password;
+    private String hosts;
+
+    @Override
+    protected void initInternal() {
+        if (mongoClient != null) {
+            return;
+        }
+
+        this.mongoClient = getMongoClient();
         this.mongoDatabase = mongoClient.getDatabase(databaseName);
         this.mongoCollection = mongoDatabase.getCollection(collectionName);
-
         if (!Lists.newArrayList(mongoDatabase.listCollectionNames()).contains(mongoCollection)) {
             try {
                 mongoDatabase.createCollection(collectionName);
@@ -52,6 +66,80 @@ public class MongoDbSessionStore extends StoreBase {
                 }
             }
         }
+    }
+
+    @Override
+    protected synchronized void stopInternal() throws LifecycleException {
+        super.stopInternal();
+
+        if (mongoClient != null) {
+            mongoClient.close();
+        }
+    }
+
+    private MongoClient getMongoClient() {
+            return new MongoClient(Lists.transform(Splitter.on(",").splitToList(hosts), new Function<String, ServerAddress>() {
+                @Override
+                public ServerAddress apply(final String hostString) {
+                    final String[] hosts = hostString.split(":");
+                    if (hosts.length == 1) {
+                        return new ServerAddress(hostString, DEFAULT_MONGO_PORT);
+                    } else {
+                        return new ServerAddress(hosts[0], Integer.valueOf(hosts[1]));
+                    }
+
+                }
+            }), MongoCredential.createCredential(username, adminDatabase, password.toCharArray()),
+                    new MongoClientOptions.Builder().build());
+    }
+
+
+    public String getDatabaseName() {
+        return databaseName;
+    }
+
+    public void setDatabaseName(String databaseName) {
+        this.databaseName = databaseName;
+    }
+
+    public String getAdminDatabase() {
+        return adminDatabase;
+    }
+
+    public void setAdminDatabase(String adminDatabase) {
+        this.adminDatabase = adminDatabase;
+    }
+
+    public String getCollectionName() {
+        return collectionName;
+    }
+
+    public void setCollectionName(String collectionName) {
+        this.collectionName = collectionName;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getHosts() {
+        return hosts;
+    }
+
+    public void setHosts(String hosts) {
+        this.hosts = hosts;
     }
 
     @Override

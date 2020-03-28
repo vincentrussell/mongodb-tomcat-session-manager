@@ -17,7 +17,6 @@ import org.junit.rules.Timeout;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.SocketUtils;
 
-import javax.print.Doc;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
@@ -65,34 +64,40 @@ public class MongoSessionManagerIT {
         when(mockContext.getParent()).thenReturn(mockEngine);
         when(mockContext.getLogger()).thenReturn(mockLog);
         mongoDatabase = embeddedMongo.getMongoClient().getDatabase(EmbeddedMongo.DEFAULT_DATABASE_NAME);
-        mongoCollection = mongoDatabase.getCollection(MongoSessionManager.USER_SESSIONS);
+        mongoCollection = mongoDatabase.getCollection(MongoSessionStore.USER_SESSIONS);
         mongoCollection.drop();
+    }
+
+    private MongoSessionManager getMongoSessionManager() {
+        try {
+            return new MongoSessionManager.Builder()
+                    .setContext(mockContext)
+                    .setDatabaseName("local")
+                    .setHosts("localhost:" + port)
+                    .setUsername(USERNAME)
+                    .setPassword(PASSWORD)
+                    .build();
+        } catch (LifecycleException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
     public void createCollectionOnStartup() {
         MongoClient mongoClient = embeddedMongo.getMongoClient();
         MongoDatabase mongoDatabase = mongoClient.getDatabase(EmbeddedMongo.DEFAULT_DATABASE_NAME);
-        MongoCollection mongoCollection = mongoDatabase.getCollection(MongoSessionManager.USER_SESSIONS);
-        assertThat(mongoDatabase.listCollectionNames(), not((hasItems(MongoSessionManager.USER_SESSIONS))));
+        MongoCollection mongoCollection = mongoDatabase.getCollection(MongoSessionStore.USER_SESSIONS);
+        assertThat(mongoDatabase.listCollectionNames(), not((hasItems(MongoSessionStore.USER_SESSIONS))));
 
-        MongoSessionManager mongoSessionManager = new MongoSessionManager.Builder()
-                .setMongoClient(mongoClient)
-                .setContext(mockContext)
-                .setDatabaseName("local")
-                .build();
+        MongoSessionManager mongoSessionManager = getMongoSessionManager();
 
-        assertThat(mongoDatabase.listCollectionNames(), (hasItems(MongoSessionManager.USER_SESSIONS)));
+        assertThat(mongoDatabase.listCollectionNames(), (hasItems(MongoSessionStore.USER_SESSIONS)));
     }
+
 
     @Test
     public void saveLoadAndRemoveSession() throws LifecycleException, IOException {
-        MongoSessionManager mongoSessionManager = new MongoSessionManager.Builder()
-                .setMongoClient(embeddedMongo.getMongoClient())
-                .setContext(mockContext)
-                .setDatabaseName("local")
-                .build();
-        mongoSessionManager.start();
+        MongoSessionManager mongoSessionManager = getMongoSessionManager();
         assertEquals(0, mongoSessionManager.getSessionCounter());
         String sessionId = mongoSessionManager.getSessionIdGenerator().generateSessionId();
         assertNotNull(sessionId);
@@ -109,12 +114,7 @@ public class MongoSessionManagerIT {
         assertEquals(1, mongoCollection.count());
         Document document = mongoCollection.find(new Document(new BasicDBObject("_id", sessionId))).iterator().next();
         assertEquals(sessionId, document.get("_id"));
-        mongoSessionManager = new MongoSessionManager.Builder()
-                .setMongoClient(embeddedMongo.getMongoClient())
-                .setContext(mockContext)
-                .setDatabaseName("local")
-                .build();
-        mongoSessionManager.start();
+        mongoSessionManager = getMongoSessionManager();
         Session sessionOfDatabase = mongoSessionManager.findSession(sessionId);
         assertEquals(sessionId, sessionOfDatabase.getId());
         assertEquals(1, mongoCollection.count());
@@ -125,12 +125,7 @@ public class MongoSessionManagerIT {
 
     @Test
     public void processExpired() throws LifecycleException, IOException {
-        MongoSessionManager mongoSessionManager = new MongoSessionManager.Builder()
-                .setMongoClient(embeddedMongo.getMongoClient())
-                .setContext(mockContext)
-                .setDatabaseName("local")
-                .build();
-        mongoSessionManager.start();
+        MongoSessionManager mongoSessionManager = getMongoSessionManager();
         assertEquals(0, mongoSessionManager.getSessionCounter());
         String sessionId = mongoSessionManager.getSessionIdGenerator().generateSessionId();
         assertNotNull(sessionId);
@@ -141,10 +136,10 @@ public class MongoSessionManagerIT {
         mongoSessionManager.processPersistenceChecks();
         assertEquals(1, mongoCollection.count());
         Document document = mongoCollection.find(new Document(new BasicDBObject("_id", sessionId))).iterator().next();
-        StandardSession loadedSession = ReflectionTestUtils.invokeMethod(mongoSessionManager.getStore(), "deserializeSession", ((Binary)document.get(MongoDbSessionStore.DATA_FIELD)).getData());
+        StandardSession loadedSession = ReflectionTestUtils.invokeMethod(mongoSessionManager.getStore(), "deserializeSession", ((Binary)document.get(MongoSessionStore.DATA_FIELD)).getData());
         ReflectionTestUtils.setField(loadedSession, "thisAccessedTime", newLastAccessedTime);
         byte[] serializedObject = ReflectionTestUtils.invokeMethod(mongoSessionManager.getStore(), "serializeSession", loadedSession);
-        document.put(MongoDbSessionStore.DATA_FIELD, serializedObject);
+        document.put(MongoSessionStore.DATA_FIELD, serializedObject);
         mongoCollection.replaceOne(new Document(new BasicDBObject("_id", document.get("_id"))), document);
         mongoSessionManager.processExpires();
         assertEquals(0, mongoCollection.count());
@@ -152,12 +147,7 @@ public class MongoSessionManagerIT {
 
     @Test
     public void clearStore() throws LifecycleException, IOException {
-        MongoSessionManager mongoSessionManager = new MongoSessionManager.Builder()
-                .setMongoClient(embeddedMongo.getMongoClient())
-                .setContext(mockContext)
-                .setDatabaseName("local")
-                .build();
-        mongoSessionManager.start();
+        MongoSessionManager mongoSessionManager = getMongoSessionManager();
         assertEquals(0, mongoSessionManager.getSessionCounter());
         String sessionId = mongoSessionManager.getSessionIdGenerator().generateSessionId();
         assertNotNull(sessionId);
@@ -168,49 +158,36 @@ public class MongoSessionManagerIT {
         assertEquals(0, mongoCollection.count());
     }
 
-
-
     @Test
     public void loadOnStartup() throws LifecycleException, IOException {
-        MongoSessionManager mongoSessionManager = new MongoSessionManager.Builder()
-                .setMongoClient(embeddedMongo.getMongoClient())
-                .setContext(mockContext)
-                .setDatabaseName("local")
-                .build();
-        mongoSessionManager.start();
+        MongoSessionManager mongoSessionManager = getMongoSessionManager();
         assertEquals(0, mongoSessionManager.getSessionCounter());
         String sessionId = mongoSessionManager.getSessionIdGenerator().generateSessionId();
         assertNotNull(sessionId);
         StandardSession session = (StandardSession) mongoSessionManager.createSession(sessionId);
         mongoSessionManager.processPersistenceChecks();
-        mongoSessionManager = new MongoSessionManager.Builder()
-                .setMongoClient(embeddedMongo.getMongoClient())
-                .setContext(mockContext)
-                .setDatabaseName("local")
-                .build();
-        mongoSessionManager.start();
+        mongoSessionManager = getMongoSessionManager();
         Session[] sessions = mongoSessionManager.findSessions();
         assertEquals(1, sessions.length);
     }
 
-
     @Test
-    public void usernameAndPassword() {
-        MongoClient mongoClient = embeddedMongo.getMongoClient();
-        MongoDatabase mongoDatabase = mongoClient.getDatabase(EmbeddedMongo.DEFAULT_DATABASE_NAME);
-        MongoCollection mongoCollection = mongoDatabase.getCollection(MongoSessionManager.USER_SESSIONS);
-        assertThat(mongoDatabase.listCollectionNames(), not((hasItems(MongoSessionManager.USER_SESSIONS))));
-
-        MongoSessionManager mongoSessionManager = new MongoSessionManager.Builder()
-                .setUsername(USERNAME)
-                .setPassword(PASSWORD)
-                .setHosts("localhost:" + port)
-                .setContext(mockContext)
-                .setDatabaseName("local")
-                .build();
-
-        assertThat(mongoDatabase.listCollectionNames(), (hasItems(MongoSessionManager.USER_SESSIONS)));
+    public void sessionManagersWithSameMongoInstance() throws LifecycleException, IOException {
+        MongoSessionManager mongoSessionManager = getMongoSessionManager();
+        MongoSessionManager mongoSessionManager2 = getMongoSessionManager();
+        assertEquals(0, mongoSessionManager.getSessionCounter());
+        assertEquals(0, mongoSessionManager2.getSessionCounter());
+        String sessionId = mongoSessionManager.getSessionIdGenerator().generateSessionId();
+        assertNotNull(sessionId);
+        StandardSession newSession = (StandardSession) mongoSessionManager.createSession(sessionId);
+        mongoSessionManager.processPersistenceChecks();
+        mongoSessionManager = getMongoSessionManager();
+        Session[] sessions = mongoSessionManager.findSessions();
+        assertEquals(1, sessions.length);
+        Session sessionFromDifferentManager = mongoSessionManager2.findSession(sessions[0].getId());
+        assertEquals(sessions[0].getId(), sessionFromDifferentManager.getId());
+        assertEquals(mongoSessionManager.getSessionCounter(), mongoSessionManager2.getSessionCounter());
+        assertEquals(mongoSessionManager.listSessionIds(), mongoSessionManager2.listSessionIds());
     }
-
 
 }
